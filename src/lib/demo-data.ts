@@ -36,7 +36,8 @@ export const DEMO_CATALOGUE = {
       width: 40,
       height: 10,
       type: 'whatsapp',
-      target: 'KEW-104'
+      target: 'KEW-104',
+      whatsapp_number: '+919876543211'
     }
   ]
 };

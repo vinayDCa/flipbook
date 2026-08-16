@@ -47,7 +47,7 @@ const Page = React.forwardRef<HTMLDivElement, PageProps>(
               e.stopPropagation();
               e.preventDefault();
               if (hotspot.type === 'whatsapp') {
-                handleWhatsApp(hotspot.target);
+                handleWhatsApp(hotspot.target, hotspot.whatsapp_number);
               }
             }}
           >
@@ -82,6 +82,20 @@ interface FlipbookEngineProps {
 export const FlipbookEngine = React.forwardRef<FlipbookEngineHandle, FlipbookEngineProps>(
   ({ pages, hotspots, onPageChange, handleWhatsApp }, ref) => {
     const bookRef = useRef<any>(null);
+    const [dimensions, setDimensions] = useState<{width: number, height: number} | null>(null);
+
+    React.useEffect(() => {
+      if (pages.length > 0) {
+        const img = new Image();
+        img.onload = () => {
+          const ratio = img.naturalWidth / img.naturalHeight;
+          const baseWidth = Math.min(img.naturalWidth, 600);
+          const baseHeight = baseWidth / ratio;
+          setDimensions({ width: baseWidth, height: baseHeight });
+        };
+        img.src = pages[0].image_url;
+      }
+    }, [pages]);
 
     useImperativeHandle(ref, () => ({
       flipNext: () => {
@@ -101,17 +115,25 @@ export const FlipbookEngine = React.forwardRef<FlipbookEngineHandle, FlipbookEng
       }
     }));
 
+    if (!dimensions) {
+      return (
+        <div className="w-full h-[80vh] flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        </div>
+      );
+    }
+
     return (
       <div className="shadow-2xl shadow-black/20 ring-1 ring-black/5 bg-white w-full h-[80vh] max-w-[800px] mx-auto">
         {/* @ts-ignore - react-pageflip types are problematic */}
         <HTMLFlipBook
-          width={400}
-          height={565}
+          width={dimensions.width}
+          height={dimensions.height}
           size="stretch"
           minWidth={315}
-          maxWidth={1000}
+          maxWidth={2000}
           minHeight={400}
-          maxHeight={1533}
+          maxHeight={3000}
           maxShadowOpacity={0.5}
           showCover={true}
           mobileScrollSupport={true}

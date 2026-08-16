@@ -1,17 +1,31 @@
-import { Outlet, Link, useLocation } from 'react-router-dom';
-import { BookOpen, BarChart3, Users, Settings, LogOut, LayoutDashboard, Database } from 'lucide-react';
+import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
+import { BookOpen, BarChart3, Users, Settings, LogOut, LayoutDashboard, History } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../lib/auth';
+import { hasSupabaseConfig } from '../../lib/supabase';
+import React from 'react';
 
 export default function AdminLayout() {
   const location = useLocation();
+  const { user, isLoading, signOut } = useAuth();
 
   const navItems = [
     { name: 'Overview', path: '/admin', icon: LayoutDashboard },
     { name: 'Flipbooks', path: '/admin/flipbooks', icon: BookOpen },
     { name: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
     { name: 'Leads', path: '/admin/leads', icon: Users },
+    { name: 'History', path: '/admin/history', icon: History },
     { name: 'Settings', path: '/admin/settings', icon: Settings },
   ];
+
+  if (isLoading) {
+    return <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">Loading session...</div>;
+  }
+
+  // If Supabase is configured but user is NOT logged in, redirect to login
+  if (hasSupabaseConfig && !user) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#F9F8F6] text-[#1A1A1A] flex font-sans">
@@ -20,7 +34,6 @@ export default function AdminLayout() {
         <div className="w-10 h-10 bg-[#C5A059] rounded-full flex items-center justify-center text-white font-serif italic text-xl">
           V
         </div>
-
         <nav className="flex-1 flex flex-col space-y-8 text-gray-400 w-full items-center">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path || (item.path !== '/admin' && location.pathname.startsWith(item.path));
@@ -41,9 +54,12 @@ export default function AdminLayout() {
             );
           })}
         </nav>
-
         <div className="mt-auto flex flex-col items-center gap-6">
-          <button title="Sign Out" className="w-6 h-6 flex items-center justify-center border border-gray-600 rounded text-gray-400 hover:border-[#C5A059] hover:text-[#C5A059] transition-colors">
+          <button 
+            title="Sign Out" 
+            onClick={signOut}
+            className="w-6 h-6 flex items-center justify-center border border-gray-600 rounded text-gray-400 hover:border-[#C5A059] hover:text-[#C5A059] transition-colors"
+          >
             <LogOut className="w-4 h-4" />
           </button>
           <div className="text-gray-500 text-[10px] uppercase tracking-widest mt-4" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
@@ -71,6 +87,7 @@ export default function AdminLayout() {
              </Link>
           </div>
         </header>
+
         <div className="flex-1 overflow-y-auto p-8">
           <div className="max-w-6xl mx-auto">
             <Outlet />
