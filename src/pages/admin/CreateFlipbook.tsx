@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { UploadCloud, FileText, CheckCircle2, Loader2, ArrowRight, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import * as pdfjsLib from 'pdfjs-dist';
+import JSZip from 'jszip';
 import { previewStore } from '../../lib/store';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -23,26 +24,69 @@ export default function CreateFlipbook() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const selectedFiles = Array.from(e.target.files);
-      const isPDF = selectedFiles.some(f => (f as any).type === 'application/pdf');
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement> | any) => {
+    const filesList = e.target?.files || e.dataTransfer?.files;
+    if (filesList && filesList.length > 0) {
+      const selectedFiles = Array.from(filesList as File[]).sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
       
-      if (isPDF) {
-        if (selectedFiles.length > 1) {
-            alert('Please upload either a single PDF or multiple images.');
-            return;
+      // Handle ZIP Files
+      const isZip = selectedFiles.some(f => f.name.toLowerCase().endsWith('.zip') || f.type.includes('zip'));
+      
+      if (isZip) {
+        setIsProcessing(true);
+        const zipFile = selectedFiles.find(f => f.name.toLowerCase().endsWith('.zip') || f.type.includes('zip'));
+        if (zipFile) {
+          try {
+            const zip = new JSZip();
+            const loadedZip = await zip.loadAsync(zipFile);
+            const extractedFiles: File[] = [];
+            
+            const entries = Object.entries(loadedZip.files);
+            for (const [relativePath, zipEntry] of entries) {
+              if (!zipEntry.dir && relativePath.match(/\.(jpg|jpeg|png|webp|gif)$/i)) {
+                // Ignore __MACOSX and hidden files
+                if (relativePath.includes('__MACOSX') || relativePath.split('/').pop()?.startsWith('.')) continue;
+                
+                const blob = await zipEntry.async('blob');
+                const file = new File([blob], relativePath.split('/').pop() || 'image.jpg', { type: blob.type || 'image/jpeg' });
+                extractedFiles.push(file);
+              }
+            }
+            
+            extractedFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
+            
+            setFiles(prev => {
+              const prevIsPDF = prev.length > 0 && prev[0].type === 'application/pdf';
+              if (prevIsPDF) return extractedFiles;
+              return [...prev, ...extractedFiles];
+            });
+          } catch (err) {
+            console.error("Failed to parse zip", err);
+            alert("Failed to parse zip file. Please ensure it contains valid images.");
+          }
         }
-        setFiles(selectedFiles);
+        setIsProcessing(false);
       } else {
-        setFiles(prev => {
-            const prevIsPDF = prev.length > 0 && prev[0].type === 'application/pdf';
-            if (prevIsPDF) return selectedFiles;
-            return [...prev, ...selectedFiles];
-        });
+        const isPDF = selectedFiles.some(f => (f as any).type === 'application/pdf');
+
+        if (isPDF) {
+          if (selectedFiles.length > 1) {
+              alert('Please upload either a single PDF or multiple images.');
+              return;
+          }
+          setFiles(selectedFiles);
+        } else {
+          setFiles(prev => {
+              const prevIsPDF = prev.length > 0 && prev[0].type === 'application/pdf';
+              if (prevIsPDF) return selectedFiles;
+              return [...prev, ...selectedFiles];
+          });
+        }
       }
       
-      e.target.value = '';
+      if (e.target && e.target.value !== undefined) {
+        try { e.target.value = ''; } catch(e) {}
+      }
     }
   };
 
@@ -159,15 +203,17 @@ export default function CreateFlipbook() {
               <div 
                 className="border border-dashed border-[#E5E4E2] bg-[#F9F8F6] p-12 flex flex-col items-center justify-center text-center cursor-pointer hover:border-[#C5A059] transition-colors"
                 onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleFileChange(e); }}
               >
                 <div className="w-12 h-12 bg-white border border-[#E5E4E2] flex items-center justify-center mb-6 text-[#1A1A1A]">
                   <UploadCloud className="w-6 h-6" />
                 </div>
-                <h3 className="font-serif italic text-lg mb-2">Click or drag PDF or Images to upload</h3>
-                <p className="text-[10px] uppercase tracking-widest text-gray-400">Upload a single PDF or multiple Images. Maximum file size 50MB.</p>
+                <h3 className="font-serif italic text-lg mb-2">Click or drag PDF, Images, or a ZIP folder to upload</h3>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400">Upload a single PDF, multiple Images, or a .zip file of images. Maximum file size 50MB.</p>
                 <input 
                   type="file" 
-                  accept="application/pdf, image/*"
+                  accept="application/pdf, image/*, application/zip, .zip"
                   multiple 
                   className="hidden" 
                   ref={fileInputRef} 

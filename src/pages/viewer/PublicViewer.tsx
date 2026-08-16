@@ -7,6 +7,7 @@ import { cn } from '../../lib/utils';
 import { FlipbookEngine, FlipbookEngineHandle } from '../../components/FlipbookEngine';
 import { VerticalFlipbookEngine } from '../../components/VerticalFlipbookEngine';
 import { previewStore } from '../../lib/store';
+import { usePageTurnSound } from '../../hooks/usePageTurnSound';
 
 export default function PublicViewer() {
   const { slug } = useParams();
@@ -25,7 +26,7 @@ export default function PublicViewer() {
   const [catalogue, setCatalogue] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  const pageTurnSoundRef = useRef<HTMLAudioElement>(null);
+  const playPageTurnSound = usePageTurnSound('https://cdn.freesound.org/previews/411/411639_5121236-lq.mp3');
   const bgMusicRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
@@ -92,17 +93,7 @@ export default function PublicViewer() {
 
   const handlePageChange = (pageIndex: number) => {
     setCurrentPage(pageIndex);
-    // Explicitly try to play the sound
-    if (pageTurnSoundRef.current) {
-      pageTurnSoundRef.current.currentTime = 0;
-      pageTurnSoundRef.current.volume = 1;
-      const playPromise = pageTurnSoundRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.warn("Audio play failed, usually due to browser policy:", error);
-        });
-      }
-    }
+    playPageTurnSound();
   };
 
   const toggleMusic = () => {
@@ -460,11 +451,7 @@ export default function PublicViewer() {
       </div>
 
       {/* Hidden Audio Elements */}
-      <audio 
-        ref={pageTurnSoundRef} 
-        src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_73bb665f8a.mp3?filename=page-flip-47177.mp3" 
-        preload="auto" 
-      />
+
       <audio 
         ref={bgMusicRef} 
         src="https://upload.wikimedia.org/wikipedia/commons/4/4b/Piano_sonata_no._14_in_C-sharp_minor_%22Moonlight%22%2C_Op._27_No._2_-_I._Adagio_sostenuto.ogg" 
