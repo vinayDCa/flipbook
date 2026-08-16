@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import { DEMO_CATALOGUE } from '../../lib/demo-data';
 import { cn } from '../../lib/utils';
 import { FlipbookEngine, FlipbookEngineHandle } from '../../components/FlipbookEngine';
+import { VerticalFlipbookEngine } from '../../components/VerticalFlipbookEngine';
 import { previewStore } from '../../lib/store';
 
 export default function PublicViewer() {
@@ -19,7 +20,7 @@ export default function PublicViewer() {
   const [viewMode, setViewMode] = useState<'flipbook' | 'single'>('flipbook');
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [isAutoPlaying, setIsAutoPlaying] = useState(false);
+  const [autoPlayDirection, setAutoPlayDirection] = useState<'forward' | 'backward' | null>(null);
   
   const [catalogue, setCatalogue] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,18 +31,26 @@ export default function PublicViewer() {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
-    if (isAutoPlaying && viewMode === 'flipbook' && catalogue) {
+    if (autoPlayDirection && viewMode === 'flipbook' && catalogue) {
       interval = setInterval(() => {
-        if (currentPage >= catalogue.page_count - 1) {
-          setIsAutoPlaying(false);
-        } else {
-          engineRef.current?.flipNext();
+        if (autoPlayDirection === 'forward') {
+          if (currentPage >= catalogue.page_count - 1) {
+            setAutoPlayDirection(null);
+          } else {
+            engineRef.current?.flipNext();
+          }
+        } else if (autoPlayDirection === 'backward') {
+          if (currentPage <= 0) {
+            setAutoPlayDirection(null);
+          } else {
+            engineRef.current?.flipPrev();
+          }
         }
       }, 3500); // Wait 3.5 seconds per page
     }
     
     return () => clearInterval(interval);
-  }, [isAutoPlaying, viewMode, currentPage, catalogue]);
+  }, [autoPlayDirection, viewMode, currentPage, catalogue]);
 
   useEffect(() => {
     async function loadData() {
@@ -83,9 +92,16 @@ export default function PublicViewer() {
 
   const handlePageChange = (pageIndex: number) => {
     setCurrentPage(pageIndex);
+    // Explicitly try to play the sound
     if (pageTurnSoundRef.current) {
       pageTurnSoundRef.current.currentTime = 0;
-      pageTurnSoundRef.current.play().catch(() => {});
+      pageTurnSoundRef.current.volume = 1;
+      const playPromise = pageTurnSoundRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.warn("Audio play failed, usually due to browser policy:", error);
+        });
+      }
     }
   };
 
@@ -310,36 +326,30 @@ export default function PublicViewer() {
               </button>
             </div>
           ) : (
-            <div className="w-full max-w-2xl flex flex-col gap-8 pb-32">
-              {catalogue.pages.map((page: any, index: number) => (
-                <div key={index} className="bg-white shadow-xl relative group">
-                  <img src={page.image_url} alt={`Page ${page.page_number}`} className="w-full h-auto" />
-                  
-                  {catalogue.hotspots.filter((h: any) => h.page_number === page.page_number).map((hotspot: any) => (
-                    <div 
-                      key={hotspot.id}
-                      className="absolute border-2 border-[#C5A059]/50 bg-[#C5A059]/10 cursor-pointer hover:bg-[#C5A059]/30 transition-colors flex items-center justify-center sm:opacity-0 sm:group-hover:opacity-100 opacity-80 z-20"
-                      style={{
-                        left: `${hotspot.x}%`,
-                        top: `${hotspot.y}%`,
-                        width: `${hotspot.width}%`,
-                        height: `${hotspot.height}%`
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        if (hotspot.type === 'whatsapp') {
-                          handleWhatsApp(hotspot.target, hotspot.whatsapp_number);
-                        }
-                      }}
-                    >
-                      <div className="bg-white/80 rounded-full p-1 sm:p-2 shadow-sm animate-pulse">
-                        <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 text-[#25D366]" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
+            <div className="relative w-full h-full max-w-6xl flex items-center justify-center">
+              <button 
+                onClick={prevButtonClick}
+                disabled={currentPage === 0}
+                className="absolute top-4 sm:top-10 z-10 p-3 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-lg backdrop-blur disabled:opacity-30 disabled:cursor-not-allowed transition-all transform -translate-y-1/2 rotate-90"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              
+              <VerticalFlipbookEngine 
+                ref={engineRef}
+                pages={catalogue.pages}
+                hotspots={catalogue.hotspots}
+                onPageChange={handlePageChange}
+                handleWhatsApp={handleWhatsApp}
+              />
+              
+              <button 
+                onClick={nextButtonClick}
+                disabled={currentPage >= totalPages - 1}
+                className="absolute bottom-4 sm:bottom-10 z-10 p-3 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-lg backdrop-blur disabled:opacity-30 disabled:cursor-not-allowed transition-all transform translate-y-1/2 rotate-90"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
             </div>
           )}
         </div>
@@ -392,13 +402,22 @@ export default function PublicViewer() {
 
         <div className="text-sm font-medium text-gray-500 hidden sm:flex items-center gap-3">
           {viewMode === 'flipbook' && (
-            <button
-              onClick={() => setIsAutoPlaying(!isAutoPlaying)}
-              className={cn("p-1.5 rounded-full transition-colors flex items-center gap-1", isAutoPlaying ? "bg-indigo-100 text-indigo-600" : "hover:bg-gray-100 text-gray-500")}
-              title={isAutoPlaying ? "Pause Auto-play" : "Start Auto-play"}
-            >
-              {isAutoPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setAutoPlayDirection(autoPlayDirection === 'backward' ? null : 'backward')}
+                className={cn("p-1.5 rounded-full transition-colors flex items-center justify-center", autoPlayDirection === 'backward' ? "bg-indigo-100 text-indigo-600" : "hover:bg-gray-100 text-gray-500")}
+                title={autoPlayDirection === 'backward' ? "Pause Auto-play" : "Auto-play Reverse"}
+              >
+                {autoPlayDirection === 'backward' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 rotate-180" />}
+              </button>
+              <button
+                onClick={() => setAutoPlayDirection(autoPlayDirection === 'forward' ? null : 'forward')}
+                className={cn("p-1.5 rounded-full transition-colors flex items-center justify-center", autoPlayDirection === 'forward' ? "bg-indigo-100 text-indigo-600" : "hover:bg-gray-100 text-gray-500")}
+                title={autoPlayDirection === 'forward' ? "Pause Auto-play" : "Auto-play Forward"}
+              >
+                {autoPlayDirection === 'forward' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+              </button>
+            </div>
           )}
           <span>{viewMode === 'flipbook' ? `Page ${currentPage + 1} of ${totalPages}` : `${totalPages} Pages`}</span>
         </div>
@@ -443,7 +462,7 @@ export default function PublicViewer() {
       {/* Hidden Audio Elements */}
       <audio 
         ref={pageTurnSoundRef} 
-        src="https://upload.wikimedia.org/wikipedia/commons/3/34/Sound_Effect_-_Page_Turn.ogg" 
+        src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_73bb665f8a.mp3?filename=page-flip-47177.mp3" 
         preload="auto" 
       />
       <audio 
