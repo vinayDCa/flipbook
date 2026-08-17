@@ -1,17 +1,12 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, Loader2, ArrowRight } from 'lucide-react';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { auth } from '../../lib/firebase';
+import fs from 'fs';
+let content = fs.readFileSync('src/pages/auth/Register.tsx', 'utf8');
 
-export default function Register() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+content = content.replace(
+  "import { createUserWithEmailAndPassword } from 'firebase/auth';",
+  "import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';"
+);
 
-  const handleGoogleRegister = async () => {
+const googleRegFn = `  const handleGoogleRegister = async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -23,25 +18,14 @@ export default function Register() {
     } finally {
       setIsLoading(false);
     }
-  };
+  };`;
 
-  return (
-    <div className="min-h-screen bg-[#F9F8F6] flex flex-col items-center justify-center p-4 text-[#1A1A1A] font-sans">
-      <div className="w-12 h-12 bg-[#C5A059] rounded-full flex items-center justify-center text-white font-serif italic text-2xl mb-8 shadow-lg">
-        V
-      </div>
-      
-      <div className="w-full max-w-md bg-white border border-[#E5E4E2] p-8 shadow-xl">
-        <h1 className="font-serif italic text-3xl text-center mb-2">Create Account</h1>
-        <p className="text-[10px] uppercase tracking-widest text-gray-400 text-center mb-8">Start creating elegant flipbooks</p>
-        
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 text-xs text-center rounded-sm">
-            {error}
-          </div>
-        )}
+content = content.replace(
+  /  const handleRegister = async.*?finally \{\n      setIsLoading\(false\);\n    \}\n  \};/s,
+  googleRegFn
+);
 
-                <div className="space-y-6">
+const googleForm = `        <div className="space-y-6">
           <button
             onClick={handleGoogleRegister}
             disabled={isLoading}
@@ -67,8 +51,11 @@ export default function Register() {
               Already have an account? Sign in
             </Link>
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+        </div>`;
+
+content = content.replace(
+  /<form onSubmit=\{handleRegister\} className="space-y-6">.*?<\/form>/s,
+  googleForm
+);
+
+fs.writeFileSync('src/pages/auth/Register.tsx', content);

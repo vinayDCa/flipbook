@@ -15,7 +15,7 @@ export default function LandingPage() {
           <Link to="/catalogue/krish-aw26" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
             View Demo
           </Link>
-          <Link to="/admin" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+          <Link to="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
             Login
           </Link>
           <Link to="/admin/create" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-all">

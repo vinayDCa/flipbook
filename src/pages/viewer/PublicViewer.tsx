@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Share2, Download, Search, Maximize, MessageCircle, ChevronLeft, ChevronRight, Grid, ArrowLeft, Home, ZoomIn, ZoomOut, FileText, BookOpen, Volume2, VolumeX, Loader2, Play, Pause } from 'lucide-react';
+import { Share2, Download, Search, Maximize, LogIn, MessageCircle, ChevronLeft, ChevronRight, Grid, ArrowLeft, Home, ZoomIn, ZoomOut, FileText, BookOpen, Volume2, VolumeX, Loader2, Play, Pause } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { DEMO_CATALOGUE } from '../../lib/demo-data';
 import { cn } from '../../lib/utils';
 import { FlipbookEngine, FlipbookEngineHandle } from '../../components/FlipbookEngine';
 import { VerticalFlipbookEngine } from '../../components/VerticalFlipbookEngine';
 import { previewStore } from '../../lib/store';
+import { db } from '../../lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { usePageTurnSound } from '../../hooks/usePageTurnSound';
+import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 
 export default function PublicViewer() {
   const { slug } = useParams();
@@ -17,22 +20,40 @@ export default function PublicViewer() {
   const [currentPage, setCurrentPage] = useState(0);
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [zoom, setZoom] = useState(1);
+  const transformComponentRef = useRef<ReactZoomPanPinchRef>(null);
   const [viewMode, setViewMode] = useState<'flipbook' | 'single'>('flipbook');
-  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [autoPlayDirection, setAutoPlayDirection] = useState<'forward' | 'backward' | null>(null);
   
   const [catalogue, setCatalogue] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  const playPageTurnSound = usePageTurnSound('https://cdn.freesound.org/previews/411/411639_5121236-lq.mp3');
+  const playPageTurnSound = usePageTurnSound('/flip.wav?v=7');
   const bgMusicRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const handleFirstInteraction = () => {
+      if (bgMusicRef.current && !isMuted) {
+        bgMusicRef.current.play().catch(() => {});
+      }
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('touchstart', handleFirstInteraction);
+    };
+    
+    document.addEventListener('click', handleFirstInteraction);
+    document.addEventListener('touchstart', handleFirstInteraction);
+    
+    return () => {
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('touchstart', handleFirstInteraction);
+    };
+  }, [isMuted]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
-    if (autoPlayDirection && viewMode === 'flipbook' && catalogue) {
+    if (autoPlayDirection && catalogue) {
       interval = setInterval(() => {
         if (autoPlayDirection === 'forward') {
           if (currentPage >= catalogue.page_count - 1) {
@@ -47,7 +68,7 @@ export default function PublicViewer() {
             engineRef.current?.flipPrev();
           }
         }
-      }, 3500); // Wait 3.5 seconds per page
+      }, 1500); // Wait 1.5 seconds per page
     }
     
     return () => clearInterval(interval);
@@ -62,8 +83,19 @@ export default function PublicViewer() {
         } else {
           navigate('/admin/create');
         }
+      } else if (slug) {
+        try {
+          const docRef = doc(db, 'flipbooks', slug);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setCatalogue(docSnap.data());
+          } else {
+            setCatalogue(DEMO_CATALOGUE);
+          }
+        } catch (e) {
+          setCatalogue(DEMO_CATALOGUE);
+        }
       } else {
-        // Fallback to demo for any other slug until backend is connected
         setCatalogue(DEMO_CATALOGUE);
       }
       setIsLoading(false);
@@ -93,17 +125,19 @@ export default function PublicViewer() {
 
   const handlePageChange = (pageIndex: number) => {
     setCurrentPage(pageIndex);
-    playPageTurnSound();
+    if (!isMuted) {
+      playPageTurnSound();
+    }
   };
 
   const toggleMusic = () => {
     if (!bgMusicRef.current) return;
-    if (isMusicPlaying) {
+    if (!isMuted) {
       bgMusicRef.current.pause();
     } else {
       bgMusicRef.current.play().catch(() => {});
     }
-    setIsMusicPlaying(!isMusicPlaying);
+    setIsMuted(!isMuted);
   };
 
   const jumpToPage = (pageIndex: number) => {
@@ -136,7 +170,10 @@ export default function PublicViewer() {
     const message = productCode 
       ? `Hi, I am interested in Product ${productCode} from your catalogue.`
       : `Hi, I am interested in your catalogue.`;
-    const url = `https://wa.me/${whatsappNum.replace('+', '')}?text=${encodeURIComponent(message)}`;
+    
+    // Use the whatsapp number as entered, just trimmed
+    const cleanNum = whatsappNum.trim();
+    const url = `https://wa.me/${cleanNum}?text=${encodeURIComponent(message)}`;
     
     const a = document.createElement('a');
     a.href = url;
@@ -249,17 +286,22 @@ export default function PublicViewer() {
         </div>
         
         <div className="flex items-center gap-1 sm:gap-2">
-          <button onClick={toggleMusic} className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors hidden sm:block" title="Toggle Music">
-            {isMusicPlaying ? <Volume2 className="w-5 h-5 text-indigo-600" /> : <VolumeX className="w-5 h-5" />}
+          <button onClick={toggleMusic} className="p-2 px-3 flex items-center gap-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Toggle Music">
+            {!isMuted ? <><Volume2 className="w-5 h-5 text-indigo-600" /><span className="text-sm font-medium">Mute</span></> : <><VolumeX className="w-5 h-5" /><span className="text-sm font-medium">Unmute</span></>}
           </button>
-          <div className="w-px h-6 bg-gray-300 mx-1 hidden sm:block"></div>
+          <div className="w-px h-6 bg-gray-300 mx-1"></div>
           
-          <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors hidden sm:block" title="Zoom Out">
+          <button onClick={() => transformComponentRef.current?.zoomOut()} className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors hidden sm:block" title="Zoom Out">
             <ZoomOut className="w-5 h-5" />
           </button>
-          <button onClick={() => setZoom(z => Math.min(z + 0.25, 3))} className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors hidden sm:block" title="Zoom In">
+          <button onClick={() => transformComponentRef.current?.zoomIn()} className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors hidden sm:block" title="Zoom In">
             <ZoomIn className="w-5 h-5" />
           </button>
+          
+          <button onClick={() => setAutoPlayDirection(prev => prev ? null : 'forward')} className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Auto Play">
+            {autoPlayDirection ? <Pause className="w-5 h-5 text-indigo-600" /> : <Play className="w-5 h-5" />}
+          </button>
+
           <div className="w-px h-6 bg-gray-300 mx-1 hidden sm:block"></div>
           
           <button onClick={handleDownload} disabled={isDownloading} className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors hidden sm:block disabled:opacity-50" title="Download">
@@ -275,75 +317,82 @@ export default function PublicViewer() {
           >
             <Maximize className="w-5 h-5" />
           </button>
+          <div className="w-px h-6 bg-gray-300 mx-1 hidden sm:block"></div>
+          <button onClick={() => navigate('/login')} className="p-2 px-3 text-gray-600 hover:bg-gray-100 rounded-full transition-colors flex items-center gap-2" title="Admin Login">
+            <LogIn className="w-5 h-5" />
+            <span className="text-sm font-medium hidden sm:block">Login</span>
+          </button>
         </div>
       </div>
 
       {/* Viewer Area */}
-      <div className={cn("flex-1 relative bg-gradient-to-br from-gray-100 to-gray-200", zoom > 1 ? "overflow-auto" : "overflow-hidden")}
-        onWheel={(e) => {
-          if (e.ctrlKey || e.metaKey || viewMode === 'flipbook') {
-             const newZoom = Math.min(Math.max(zoom - e.deltaY * 0.005, 0.5), 4);
-             setZoom(newZoom);
-          }
-        }}>
-        <div 
-          className="relative w-full h-full min-h-full flex items-center justify-center p-4 sm:p-8 transition-transform duration-200 ease-out origin-center"
-          style={{ transform: `scale(${zoom})`, width: zoom > 1 ? `${zoom * 100}%` : '100%', height: zoom > 1 ? `${zoom * 100}%` : '100%' }}
+      <div className="flex-1 relative bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
+        <TransformWrapper
+          ref={transformComponentRef}
+          initialScale={1}
+          minScale={0.5}
+          maxScale={4}
+          centerOnInit
+          wheel={{ smoothStep: 0.005 }}
+          pinch={{ step: 5 }}
+          panning={{ excluded: ['button', 'input', 'textarea', 'flip-book', 'cursor-grab'] }}
         >
-          {viewMode === 'flipbook' ? (
-            <div className="relative w-full h-full max-w-6xl flex items-center justify-center">
-              <button 
-                onClick={prevButtonClick}
-                disabled={currentPage === 0}
-                className="absolute left-0 z-10 p-3 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-lg backdrop-blur disabled:opacity-30 disabled:cursor-not-allowed transition-all transform -translate-x-1/2"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
+          <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {viewMode === 'flipbook' ? (
+              <div className="relative w-full h-full max-w-6xl flex items-center justify-center">
+                <button 
+                  onClick={prevButtonClick}
+                  disabled={currentPage === 0}
+                  className="absolute left-0 z-10 p-3 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-lg backdrop-blur disabled:opacity-30 disabled:cursor-not-allowed transition-all transform -translate-x-1/2"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
 
-              <FlipbookEngine 
-                ref={engineRef}
-                pages={catalogue.pages}
-                hotspots={catalogue.hotspots}
-                onPageChange={handlePageChange}
-                handleWhatsApp={handleWhatsApp}
-              />
+                <FlipbookEngine 
+                  ref={engineRef}
+                  pages={catalogue.pages}
+                  hotspots={catalogue.hotspots}
+                  onPageChange={handlePageChange}
+                  handleWhatsApp={handleWhatsApp}
+                />
 
-              <button 
-                onClick={nextButtonClick}
-                disabled={currentPage >= totalPages - 1}
-                className="absolute right-0 z-10 p-3 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-lg backdrop-blur disabled:opacity-30 disabled:cursor-not-allowed transition-all transform translate-x-1/2"
-              >
-                <ChevronRight className="w-6 h-6" />
-              </button>
-            </div>
-          ) : (
-            <div className="relative w-full h-full max-w-6xl flex items-center justify-center">
-              <button 
-                onClick={prevButtonClick}
-                disabled={currentPage === 0}
-                className="absolute top-4 sm:top-10 z-10 p-3 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-lg backdrop-blur disabled:opacity-30 disabled:cursor-not-allowed transition-all transform -translate-y-1/2 rotate-90"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              
-              <VerticalFlipbookEngine 
-                ref={engineRef}
-                pages={catalogue.pages}
-                hotspots={catalogue.hotspots}
-                onPageChange={handlePageChange}
-                handleWhatsApp={handleWhatsApp}
-              />
-              
-              <button 
-                onClick={nextButtonClick}
-                disabled={currentPage >= totalPages - 1}
-                className="absolute bottom-4 sm:bottom-10 z-10 p-3 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-lg backdrop-blur disabled:opacity-30 disabled:cursor-not-allowed transition-all transform translate-y-1/2 rotate-90"
-              >
-                <ChevronRight className="w-6 h-6" />
-              </button>
-            </div>
-          )}
-        </div>
+                <button 
+                  onClick={nextButtonClick}
+                  disabled={currentPage >= totalPages - 1}
+                  className="absolute right-0 z-10 p-3 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-lg backdrop-blur disabled:opacity-30 disabled:cursor-not-allowed transition-all transform translate-x-1/2"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
+              </div>
+            ) : (
+              <div className="relative w-full h-full max-w-6xl flex items-center justify-center">
+                <button 
+                  onClick={prevButtonClick}
+                  disabled={currentPage === 0}
+                  className="absolute top-4 sm:top-10 z-10 p-3 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-lg backdrop-blur disabled:opacity-30 disabled:cursor-not-allowed transition-all transform -translate-y-1/2 rotate-90"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+                
+                <VerticalFlipbookEngine 
+                  ref={engineRef}
+                  pages={catalogue.pages}
+                  hotspots={catalogue.hotspots}
+                  onPageChange={handlePageChange}
+                  handleWhatsApp={handleWhatsApp}
+                />
+                
+                <button 
+                  onClick={nextButtonClick}
+                  disabled={currentPage >= totalPages - 1}
+                  className="absolute bottom-4 sm:bottom-10 z-10 p-3 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-lg backdrop-blur disabled:opacity-30 disabled:cursor-not-allowed transition-all transform translate-y-1/2 rotate-90"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
+              </div>
+            )}
+          </TransformComponent>
+        </TransformWrapper>
       </div>
 
       {/* Bottom Toolbar */}
@@ -392,8 +441,7 @@ export default function PublicViewer() {
         </div>
 
         <div className="text-sm font-medium text-gray-500 hidden sm:flex items-center gap-3">
-          {viewMode === 'flipbook' && (
-            <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1">
               <button
                 onClick={() => setAutoPlayDirection(autoPlayDirection === 'backward' ? null : 'backward')}
                 className={cn("p-1.5 rounded-full transition-colors flex items-center justify-center", autoPlayDirection === 'backward' ? "bg-indigo-100 text-indigo-600" : "hover:bg-gray-100 text-gray-500")}
@@ -409,7 +457,6 @@ export default function PublicViewer() {
                 {autoPlayDirection === 'forward' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
               </button>
             </div>
-          )}
           <span>{viewMode === 'flipbook' ? `Page ${currentPage + 1} of ${totalPages}` : `${totalPages} Pages`}</span>
         </div>
 
@@ -454,7 +501,7 @@ export default function PublicViewer() {
 
       <audio 
         ref={bgMusicRef} 
-        src="https://upload.wikimedia.org/wikipedia/commons/4/4b/Piano_sonata_no._14_in_C-sharp_minor_%22Moonlight%22%2C_Op._27_No._2_-_I._Adagio_sostenuto.ogg" 
+        src="/bg.mp3?v=4" 
         loop 
         preload="auto" 
         crossOrigin="anonymous"

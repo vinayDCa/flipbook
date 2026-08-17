@@ -116,6 +116,12 @@ export const VerticalFlipbookEngine = React.forwardRef<FlipbookEngineHandle, Ver
           >
             <img src={page.image_url} alt={`Page ${page.page_number}`} className="w-full h-full object-contain pointer-events-none" />
             
+            {page.product_details && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1.5 rounded-full text-[10px] uppercase tracking-widest z-30 shadow-lg backdrop-blur pointer-events-none truncate max-w-[90%]">
+                {page.product_details}
+              </div>
+            )}
+
             {/* Hotspots */}
             {hotspots.filter(h => h.page_number === page.page_number).map(hotspot => (
               <div 

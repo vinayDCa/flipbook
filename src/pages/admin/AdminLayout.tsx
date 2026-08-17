@@ -1,19 +1,19 @@
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
-import { BookOpen, BarChart3, Users, Settings, LogOut, LayoutDashboard, History } from 'lucide-react';
+import { BookOpen, BarChart3, Users, Settings, LogOut, LayoutDashboard, History, BrainCircuit, MessageSquareText } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../lib/auth';
-import { hasSupabaseConfig } from '../../lib/supabase';
 import React from 'react';
 
 export default function AdminLayout() {
   const location = useLocation();
   const { user, isLoading, signOut } = useAuth();
 
+
   const navItems = [
     { name: 'Overview', path: '/admin', icon: LayoutDashboard },
     { name: 'Flipbooks', path: '/admin/flipbooks', icon: BookOpen },
-    { name: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
-    { name: 'Leads', path: '/admin/leads', icon: Users },
+    { name: 'AI Lead Qualification', path: '/admin/lead-qualification', icon: Users },
+    { name: 'AI Analytics', path: '/admin/analytics', icon: BarChart3 },
     { name: 'History', path: '/admin/history', icon: History },
     { name: 'Settings', path: '/admin/settings', icon: Settings },
   ];
@@ -22,8 +22,8 @@ export default function AdminLayout() {
     return <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">Loading session...</div>;
   }
 
-  // If Supabase is configured but user is NOT logged in, redirect to login
-  if (hasSupabaseConfig && !user) {
+  // Redirect to login if user is NOT logged in
+  if (!user) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 

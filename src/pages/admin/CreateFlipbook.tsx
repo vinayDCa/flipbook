@@ -4,10 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import * as pdfjsLib from 'pdfjs-dist';
 import JSZip from 'jszip';
 import { previewStore } from '../../lib/store';
+import { db } from '../../lib/firebase';
+import { collection, addDoc } from 'firebase/firestore';
+import { useAuth } from '../../lib/auth';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 export default function CreateFlipbook() {
+  const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [files, setFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -129,7 +133,7 @@ export default function CreateFlipbook() {
           context.fillStyle = '#ffffff';
           context.fillRect(0, 0, canvas.width, canvas.height);
               
-          await page.render({ canvasContext: context, viewport }).promise;
+          await page.render({ canvasContext: context, viewport, canvas: canvas }).promise;
               
           // Use JPEG for smaller memory footprint compared to PNG
           const imageUrl = canvas.toDataURL('image/jpeg', 0.8);
@@ -155,7 +159,8 @@ export default function CreateFlipbook() {
           extractedPages.push({
             page_number: i + 1,
             image_url: imageUrl,
-            thumbnail_url: imageUrl
+            thumbnail_url: imageUrl,
+            product_details: file.name.replace(/\.[^/.]+$/, "")
           });
 
           setProgress(Math.round(((i + 1) / files.length) * 100));

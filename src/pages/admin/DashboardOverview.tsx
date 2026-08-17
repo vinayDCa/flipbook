@@ -1,15 +1,76 @@
+import { db } from '../../lib/firebase';
+import { collection, query, getDocs, where } from 'firebase/firestore';
+import { useAuth } from '../../lib/auth';
 import { BookOpen, Eye, MessageCircle, Share2, TrendingUp, ArrowUpRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { previewStore } from '../../lib/store';
+
+function ProductRow({ name, code, leads, time, isNew }: { name: string, code: string, leads: number, time: string, isNew: boolean }) {
+  return (
+    <div className="flex items-center justify-between pb-4 border-b border-[#E5E4E2] last:border-0 last:pb-0">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-[#F9F8F6] border border-[#E5E4E2] flex items-center justify-center relative">
+          <BookOpen className="w-4 h-4 text-[#C5A059]" />
+          {isNew && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></div>}
+        </div>
+        <div>
+          <div className="text-sm font-medium text-gray-900">{name}</div>
+          <div className="text-xs text-gray-500">{code}</div>
+        </div>
+      </div>
+      <div className="text-right">
+        <div className="text-sm font-semibold text-gray-900">{leads} Leads</div>
+        <div className="text-[10px] text-gray-500">{time}</div>
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardOverview() {
+  const { user } = useAuth();
+  const [flipbooks, setFlipbooks] = useState<any[]>([]);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    async function loadFlipbooks() {
+      try {
+        if (user) {
+          const q = query(
+            collection(db, 'flipbooks'),
+            where('user_id', '==', user.uid)
+          );
+          const querySnapshot = await getDocs(q);
+          const books = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+          books.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          
+          if (books.length > 0) {
+            setFlipbooks(books.slice(0, 5));
+          } else {
+            const preview = await previewStore.load();
+            if (preview) setFlipbooks([preview]);
+          }
+        } else {
+          const preview = await previewStore.load();
+          if (preview) {
+            setFlipbooks([preview]);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    loadFlipbooks();
+  }, []);
+
   return (
     <div className="space-y-8 text-[#1A1A1A]">
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Flipbooks" value="12" icon={BookOpen} percent={100} />
-        <StatCard title="Total Views" value="24,892" icon={Eye} percent={70} />
-        <StatCard title="Total Enquiries" value="842" icon={MessageCircle} percent={45} />
-        <StatCard title="Total Shares" value="1,204" icon={Share2} percent={85} />
+        <StatCard title="Total Flipbooks" value={flipbooks.length.toString()} icon={BookOpen} percent={100} />
+        <StatCard title="Total Views" value="0" icon={Eye} percent={0} />
+        <StatCard title="Total Enquiries" value="0" icon={MessageCircle} percent={0} />
+        <StatCard title="Total Shares" value="0" icon={Share2} percent={0} />
       </div>
 
       {/* Recent Activity & Top Catalogues */}
@@ -33,30 +94,38 @@ export default function DashboardOverview() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E5E4E2]">
-                <TableRow 
-                  name="Krish Ethnic Wear — AW 2026" 
-                  slug="krish-aw26" 
-                  pages={42} 
-                  views="12.4k" 
-                  enquiries={482} 
-                  status="Published" 
-                />
-                <TableRow 
-                  name="Glitorium Summer Collection" 
-                  slug="glitorium-summer" 
-                  pages={28} 
-                  views="8.2k" 
-                  enquiries={214} 
-                  status="Published" 
-                />
-                <TableRow 
-                  name="Royal Furniture 2026" 
-                  slug="royal-furniture" 
-                  pages={64} 
-                  views="3.1k" 
-                  enquiries={89} 
-                  status="Draft" 
-                />
+                {flipbooks.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-gray-500 text-sm">No recent activity.</td>
+                  </tr>
+                ) : flipbooks.map((fb, i) => (
+                  <tr key={fb.id || i} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => window.open(`/c/${fb.slug || 'preview'}`, '_blank')}>
+                    <td className="py-4 px-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-10 bg-[#F9F8F6] border border-[#E5E4E2] flex-shrink-0 flex items-center justify-center overflow-hidden">
+                           {(fb.cover_url || (fb.pages && fb.pages[0]?.thumbnail_url)) ? (
+                              <img src={fb.cover_url || fb.pages[0]?.thumbnail_url} alt="Cover" className="w-full h-full object-cover" />
+                            ) : null}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-[#1A1A1A]">{fb.title || fb.business_name || 'Untitled'}</p>
+                          <p className="text-[10px] text-gray-400">/catalogue/{fb.slug || 'preview'}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-5 text-xs text-gray-600 text-right">{fb.page_count || fb.pages?.length || 0}</td>
+                    <td className="py-4 px-5 text-xs text-gray-600 text-right">{fb.views || 0}</td>
+                    <td className="py-4 px-5 text-xs text-gray-600 text-right">{fb.leads || 0}</td>
+                    <td className="py-4 px-5">
+                      <span className="text-[9px] px-2 py-1 rounded-full uppercase font-bold bg-green-50 text-green-600">LIVE</span>
+                    </td>
+                    <td className="py-4 px-5 text-right">
+                      <button className="text-[10px] text-gray-400 font-bold uppercase tracking-widest hover:text-[#C5A059] transition-colors flex items-center gap-1 justify-end w-full">
+                        View <ArrowUpRight className="w-3 h-3" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -95,41 +164,3 @@ function StatCard({ title, value, icon: Icon, percent }: { title: string, value:
   );
 }
 
-function TableRow({ name, slug, pages, views, enquiries, status }: any) {
-  const isPublished = status === 'Published';
-  return (
-    <tr className="hover:bg-gray-50/50 transition-colors group">
-      <td className="py-4 px-5">
-        <p className="text-xs font-bold text-[#1A1A1A]">{name}</p>
-        <p className="text-[10px] text-gray-400">/{slug}</p>
-      </td>
-      <td className="py-4 px-5 text-xs text-gray-600 text-right">{pages}</td>
-      <td className="py-4 px-5 text-xs text-gray-600 text-right">{views}</td>
-      <td className="py-4 px-5 text-xs text-gray-600 text-right">{enquiries}</td>
-      <td className="py-4 px-5">
-        <span className={`text-[9px] px-2 py-1 rounded-full uppercase font-bold ${isPublished ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
-          {isPublished ? 'LIVE' : 'DRAFT'}
-        </span>
-      </td>
-      <td className="py-4 px-5 text-right">
-        <Link to={`/catalogue/${slug}`} target="_blank" className="text-gray-400 hover:text-[#C5A059] transition-colors inline-flex p-1">
-          <ArrowUpRight className="w-4 h-4" />
-        </Link>
-      </td>
-    </tr>
-  );
-}
-
-function ProductRow({ name, code, leads, time, isNew }: any) {
-  return (
-    <div className="border-b border-gray-100 pb-3 flex justify-between items-center last:border-0 last:pb-0">
-      <div className="flex flex-col">
-        <p className="text-xs font-bold text-[#1A1A1A]">{name}</p>
-        <p className="text-[10px] text-gray-400">Code {code} • {leads} leads</p>
-      </div>
-      <span className={`text-[9px] px-2 py-1 rounded-full uppercase font-bold ${isNew ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
-        {isNew ? 'NEW' : 'TREND'}
-      </span>
-    </div>
-  );
-}
